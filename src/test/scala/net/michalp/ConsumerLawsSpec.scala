@@ -83,3 +83,33 @@ class SyncIOConsumerLawsSpec extends Specification with Discipline with TestInst
   )
 
 }
+
+class OptionConsumerLawsSpec extends Specification with Discipline {
+
+
+  implicit def exhaustiveFunctionByExamples[M[_], A: Cogen](
+    implicit arb: Arbitrary[M[Unit]]
+  ): ExhaustiveCheck[A => M[Unit]] =
+    ExhaustiveCheck.instance {
+      List.fill(100)(Arbitrary.arbitrary[A => M[Unit]].sample).flattenOption
+    }
+
+  implicit def arbF[A: Arbitrary]: Arbitrary[(A => Option[Unit]) => Option[Unit]] = Arbitrary {
+    implicit val argCogen: Cogen[A => Option[Unit]] = Cogen.function1[A, Option[Unit]]
+    Gen.function1[(A => Option[Unit]), Option[Unit]](implicitly[Arbitrary[Option[Unit]]].arbitrary)
+  }
+
+  implicit def arbConsumer: Arbitrary[Consumer[Option, Int]] = Arbitrary {
+    arbF[Int].arbitrary.map { generatedF =>
+      new Consumer[Option, Int] {
+        override def consume(f: Int => Option[Unit]): Option[Unit] = generatedF(f)
+      }
+    }
+  }
+
+  checkAll(
+    "Monoid[Consumer[Option, Int]]",
+    MonoidTests[Consumer[Option, Int]](Consumer.monoid[Option, Int]).monoid
+  )
+
+}
